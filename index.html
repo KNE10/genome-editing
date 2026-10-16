@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GENECRAFT - 인터랙티브 DNA 편집 시뮬레이터</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkBg: '#0D1117',
+                        darkPanel: '#161B22',
+                        darkBorder: '#30363D',
+                        adenine: '#00E676',
+                        thymine: '#FF3D00',
+                        guanine: '#00E5FF',
+                        cytosine: '#FFD600',
+                    },
+                    boxShadow: {
+                        neonA: '0 0 10px rgba(0, 230, 118, 0.5)',
+                        neonT: '0 0 10px rgba(255, 61, 0, 0.5)',
+                        neonG: '0 0 10px rgba(0, 229, 255, 0.5)',
+                        neonC: '0 0 10px rgba(255, 214, 0, 0.5)',
+                        glow: '0 0 20px rgba(0, 229, 255, 0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Lucide Icons (CDN) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;700&family=Orbitron:wght@400;600;800&family=Pretendard:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Pretendard', sans-serif;
+            background-color: #0D1117;
+            overflow-x: hidden;
+        }
+        .font-orbitron {
+            font-family: 'Orbitron', sans-serif;
+        }
+        .font-code {
+            font-family: 'Fira Code', monospace;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #161B22;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #30363D;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #8b949e;
+        }
+        
+        /* Pulse Animation for CRISPR Target Highlight */
+        @keyframes target-pulse {
+            0%, 100% { border-color: #ff3d00; box-shadow: 0 0 8px #ff3d00; }
+            50% { border-color: #ffffff; box-shadow: 0 0 18px #ffffff; }
+        }
+        .crispr-target-active {
+            animation: target-pulse 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen flex flex-col selection:bg-cyan-500 selection:text-black">
+
+    <!-- TOP HEADER -->
+    <header class="border-b border-darkBorder bg-darkPanel/80 backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-br from-cyan-400 to-green-400 p-2 rounded-xl text-black">
+                <i data-lucide="dna" class="w-6 h-6 animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold font-orbitron tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-green-400">GENECRAFT</h1>
+                <p class="text-xs text-gray-400">가상 유전체 공학 및 생명체 시뮬레이터 v2.1</p>
+            </div>
+        </div>
+        
+        <!-- Status Bar -->
+        <div class="hidden md:flex items-center space-x-6 text-sm">
+            <div class="flex items-center space-x-2 bg-darkBg px-3 py-1.5 rounded-full border border-darkBorder">
+                <span class="w-2.5 h-2.5 rounded-full bg-green-500 animate-ping"></span>
+                <span class="text-xs text-gray-300">중앙 전사/번역 엔진 동기화 완료</span>
+            </div>
+            <div class="flex items-center space-x-2 text-xs text-gray-400">
+                <span>CAS9 활성도:</span>
+                <span class="text-green-400 font-code">99.8%</span>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-2">
+            <button onclick="resetToDefault()" class="flex items-center space-x-1 bg-red-950/40 hover:bg-red-900/50 border border-red-800 text-red-200 px-3 py-1.5 rounded-lg text-sm transition-all duration-200">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+                <span>실험 초기화</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- MAIN INTERACTIVE LAYOUT -->
+    <main class="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-6 p-6 h-[calc(100vh-73px)] overflow-y-auto xl:overflow-hidden">
+        
+        <!-- LEFT COLUMN: CRISPR & Gene Cassettes Library (4 Cols) -->
+        <section class="xl:col-span-4 flex flex-col space-y-6 h-full xl:overflow-y-auto pr-0 xl:pr-2">
+            
+            <!-- CRISPR-Cas9 Control Panel -->
+            <div class="bg-darkPanel border border-darkBorder rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-24 h-24 bg-red-500/5 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="flex items-center space-x-2 mb-4">
+                    <div class="p-1.5 bg-red-500/10 text-red-400 rounded-lg">
+                        <i data-lucide="scissors" class="w-5 h-5"></i>
+                    </div>
+                    <h2 class="text-md font-bold text-gray-200">CRISPR-Cas9 유전자 가위</h2>
+                </div>
+                
+                <p class="text-xs text-gray-400 mb-4 leading-relaxed">
+                    목표 유전자 염기서열을 탐색하고 정밀하게 절단하여 불필요한 서열을 제거하거나 새로운 카세트를 삽입할 수 있는 CRISPR 모듈입니다.
+                </p>
+
+                <div class="space-y-3">
+                    <div>
+                        <label class="text-xs text-gray-400 block mb-1">가이드 RNA 표적 입력 (예: GATC)</label>
+                        <div class="flex space-x-2 mb-2">
+                            <input type="text" id="crispr-input" placeholder="서열 입력 (A, T, G, C)" 
+                                   class="bg-darkBg border border-darkBorder rounded-lg px-3 py-2 text-sm font-code flex-1 focus:outline-none focus:border-red-500 text-orange-400 placeholder:text-gray-600 uppercase">
+                            <button onclick="searchCRISPR()" class="bg-red-600 hover:bg-red-500 text-white font-semibold text-xs px-4 py-2 rounded-lg transition-all duration-150 flex items-center space-x-1">
+                                <i data-lucide="search" class="w-3.5 h-3.5"></i>
+                                <span>탐색</span>
+                            </button>
+                        </div>
+                        
+                        <!-- 가상 키패드 지원으로 원활한 입력 보증 -->
+                        <div class="flex space-x-1.5 justify-between">
+                            <button onclick="appendCrisprChar('A')" class="flex-1 py-1 bg-darkBg hover:bg-green-500/20 border border-green-500/30 rounded text-adenine font-bold text-xs font-orbitron transition-all">A</button>
+                            <button onclick="appendCrisprChar('T')" class="flex-1 py-1 bg-darkBg hover:bg-red-500/20 border border-red-500/30 rounded text-thymine font-bold text-xs font-orbitron transition-all">T</button>
+                            <button onclick="appendCrisprChar('G')" class="flex-1 py-1 bg-darkBg hover:bg-cyan-500/20 border border-cyan-500/30 rounded text-guanine font-bold text-xs font-orbitron transition-all">G</button>
+                            <button onclick="appendCrisprChar('C')" class="flex-1 py-1 bg-darkBg hover:bg-yellow-500/20 border border-yellow-500/30 rounded text-cytosine font-bold text-xs font-orbitron transition-all">C</button>
+                            <button onclick="backspaceCrisprChar()" class="px-3 py-1 bg-darkBg hover:bg-red-950/40 border border-darkBorder rounded text-red-400 font-bold text-xs transition-all flex items-center justify-center">
+                                <i data-lucide="delete" class="w-3.5 h-3.5"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Search result status -->
+                    <div id="crispr-status" class="bg-darkBg/60 p-2.5 rounded-lg border border-darkBorder text-xs text-gray-400 min-h-[36px] flex items-center">
+                        유전자 서열 가이드라인이 준비되었습니다. 탐색할 부위를 입력해 주세요.
+                    </div>
+
+                    <!-- Cut Buttons -->
+                    <div class="flex space-x-2 pt-1">
+                        <button id="btn-cut" disabled onclick="executeCRISPRCut()" class="w-full py-2 bg-red-950/20 border border-red-900/40 text-red-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 cursor-not-allowed">
+                            <i data-lucide="scissors" class="w-3.5 h-3.5"></i>
+                            <span>표적 부위 절단 (Cut)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Gene Cassettes Library -->
+            <div class="bg-darkPanel border border-darkBorder rounded-2xl p-5 shadow-lg flex-1 flex flex-col min-h-[350px]">
+                <div class="flex items-center space-x-2 mb-4">
+                    <div class="p-1.5 bg-green-500/10 text-green-400 rounded-lg">
+                        <i data-lucide="library" class="w-5 h-5"></i>
+                    </div>
+                    <h2 class="text-md font-bold text-gray-200">유전자 카세트 보관소 (Cassettes)</h2>
+                </div>
+
+                <p class="text-xs text-gray-400 mb-4 leading-relaxed">
+                    기능이 확인된 유전 형질 조각들입니다. 클릭 시 절단되었거나 선택된 DNA 위치에 즉시 주입 및 융합됩니다.
+                </p>
+
+                <!-- Scrollable library list -->
+                <div class="space-y-3 flex-1 overflow-y-auto pr-1" id="cassette-list">
+                    <!-- Cassette items -->
+                    <div onclick="insertCassette('GFP')" class="group bg-darkBg hover:bg-green-950/20 border border-darkBorder hover:border-green-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-green-400 group-hover:translate-x-1 transition-transform">🧬 녹색 형광 발광 유전자 (GFP)</span>
+                            <span class="text-[10px] bg-green-900/30 text-green-400 border border-green-800/50 px-1.5 py-0.5 rounded">발광성</span>
+                        </div>
+                        <p class="text-xs text-gray-400">발광 해파리에서 유래된 녹색 형광 단백질을 발현시킵니다.</p>
+                        <div class="mt-2 text-[10px] text-green-500/80 font-code font-bold">서열: ATGGGCTTT</div>
+                    </div>
+
+                    <div onclick="insertCassette('GIANT')" class="group bg-darkBg hover:bg-cyan-950/20 border border-darkBorder hover:border-cyan-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-cyan-400 group-hover:translate-x-1 transition-transform">🧬 세포 거대화 성장 호르몬 (GH)</span>
+                            <span class="text-[10px] bg-cyan-900/30 text-cyan-400 border border-cyan-800/50 px-1.5 py-0.5 rounded">세포 크기</span>
+                        </div>
+                        <p class="text-xs text-gray-400">생장 속도를 200% 증가시키며 신체 체적을 급격히 확장합니다.</p>
+                        <div class="mt-2 text-[10px] text-cyan-500/80 font-code font-bold">서열: ATGGGGAAAAAA</div>
+                    </div>
+
+                    <div onclick="insertCassette('BLUE')" class="group bg-darkBg hover:bg-blue-950/20 border border-darkBorder hover:border-blue-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-blue-400 group-hover:translate-x-1 transition-transform">🧬 심해 산호 청색 색소 유전자</span>
+                            <span class="text-[10px] bg-blue-900/30 text-blue-400 border border-blue-800/50 px-1.5 py-0.5 rounded">색상 변경</span>
+                        </div>
+                        <p class="text-xs text-gray-400">자외선을 흡수하여 영롱한 청색 천연 생체 색소를 발현시킵니다.</p>
+                        <div class="mt-2 text-[10px] text-cyan-500/80 font-code font-bold">서열: ATGTTTCCCGGG</div>
+                    </div>
+
+                    <div onclick="insertCassette('RESIST')" class="group bg-darkBg hover:bg-purple-950/20 border border-darkBorder hover:border-purple-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-purple-400 group-hover:translate-x-1 transition-transform">🧬 극한 기온 생존 단백질</span>
+                            <span class="text-[10px] bg-purple-900/30 text-purple-400 border border-purple-800/50 px-1.5 py-0.5 rounded">생명력</span>
+                        </div>
+                        <p class="text-xs text-gray-400">세포벽 결빙을 막아 혹독한 극지나 화산지대 고온에서도 생존하게 합니다.</p>
+                        <div class="mt-2 text-[10px] text-purple-500/80 font-code font-bold">서열: ATGCCCGGG</div>
+                    </div>
+
+                    <div onclick="insertCassette('RFP')" class="group bg-darkBg hover:bg-red-950/20 border border-darkBorder hover:border-red-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-red-400 group-hover:translate-x-1 transition-transform">🧬 산호 붉은 형광 유전자 (RFP)</span>
+                            <span class="text-[10px] bg-red-900/30 text-red-400 border border-red-800/50 px-1.5 py-0.5 rounded">적색 발광</span>
+                        </div>
+                        <p class="text-xs text-gray-400">깊은 바다 산호에서 추출한 선명한 적색 형광 단백질을 표출합니다.</p>
+                        <div class="mt-2 text-[10px] text-red-500/80 font-code font-bold">서열: ATGAAAGGG</div>
+                    </div>
+
+                    <div onclick="insertCassette('MELANIN')" class="group bg-darkBg hover:bg-stone-900 hover:border-stone-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-stone-300 group-hover:translate-x-1 transition-transform">🧬 자외선 방어 멜라닌 합성 유전자</span>
+                            <span class="text-[10px] bg-stone-800 text-stone-300 border border-stone-700 px-1.5 py-0.5 rounded">UV 방어</span>
+                        </div>
+                        <p class="text-xs text-gray-400">강력한 자외선과 우주 방사선으로부터 유전체 붕괴를 완벽히 차단합니다.</p>
+                        <div class="mt-2 text-[10px] text-stone-400 font-code font-bold">서열: ATGAAATTTGGG</div>
+                    </div>
+
+                    <div onclick="insertCassette('PETASE')" class="group bg-darkBg hover:bg-emerald-950/20 border border-darkBorder hover:border-emerald-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-emerald-400 group-hover:translate-x-1 transition-transform">🧬 플라스틱 분해 효소 (PETase)</span>
+                            <span class="text-[10px] bg-emerald-900/30 text-emerald-400 border border-emerald-800/50 px-1.5 py-0.5 rounded">초고속 대사</span>
+                        </div>
+                        <p class="text-xs text-gray-400">환경 미세 플라스틱을 초고속으로 대사 분해하여 무해화합니다.</p>
+                        <div class="mt-2 text-[10px] text-emerald-500/80 font-code font-bold">서열: ATGCCCGGGAAA</div>
+                    </div>
+
+                    <div onclick="insertCassette('NEURO')" class="group bg-darkBg hover:bg-amber-950/20 border border-darkBorder hover:border-amber-500/50 p-3.5 rounded-xl transition-all duration-200 cursor-pointer flex flex-col">
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-amber-400 group-hover:translate-x-1 transition-transform">🧬 초광속 신경 전달 가속 유전자</span>
+                            <span class="text-[10px] bg-amber-900/30 text-amber-400 border border-amber-800/50 px-1.5 py-0.5 rounded">신경 반응 강화</span>
+                        </div>
+                        <p class="text-xs text-gray-400">시냅스 자극 전달 속도를 극대화하여 신경 반응 속도를 향상시킵니다.</p>
+                        <div class="mt-2 text-[10px] text-amber-500/80 font-code font-bold">서열: ATGAAACCCGGG</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER COLUMN: Interactive Double Helix Viewport (5 Cols) -->
+        <section class="xl:col-span-5 flex flex-col space-y-6 h-full">
+            <div class="bg-darkPanel border border-darkBorder rounded-2xl p-5 shadow-lg flex-1 flex flex-col relative min-h-[450px]">
+                
+                <!-- Viewport header -->
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="p-1.5 bg-cyan-500/10 text-cyan-400 rounded-lg">
+                            <i data-lucide="eye" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-md font-bold text-gray-200">실시간 유전자 이중 나선 렌더러</h2>
+                            <p class="text-[10px] text-gray-400">정밀 3D 깊이 정렬 및 비대칭 홈(Groove) 시뮬레이션</p>
+                        </div>
+                    </div>
+
+                    <!-- DNA Template Selector -->
+                    <div class="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap gap-2">
+                        <div class="flex items-center space-x-1.5 bg-darkBg px-2.5 py-1 rounded-lg border border-darkBorder">
+                            <i data-lucide="microscope" class="w-3.5 h-3.5 text-cyan-400"></i>
+                            <span class="text-[10px] text-gray-400 whitespace-nowrap">시작 유전자:</span>
+                            <select id="template-select" onchange="loadGeneTemplate(this.value)" class="bg-darkPanel text-xs font-code text-cyan-300 font-bold border border-darkBorder rounded px-2 py-0.5 focus:outline-none focus:border-cyan-500 cursor-pointer">
+                                <option value="DEFAULT">기본 야생형 (Wildtype - 22bp)</option>
+                                <option value="GFP_STRAIN">발광 해파리 GFP 융합 균주</option>
+                                <option value="THERMO">극지/화산 내열성 극대화 균주</option>
+                                <option value="PLASTIC">환경 정화 PET분해 특화 서열</option>
+                                <option value="SICKLE_CELL">인간 낫모양 적혈구 유전자 (HBB Target)</option>
+                                <option value="INSULIN">인간 인슐린 생합성 유전자 (INS Target)</option>
+                                <option value="TARDIGRADE">완물동물(곰벌레) 방사선 내성 유전자</option>
+                                <option value="LUCIFERASE">반딧불이 루시페라아제 생체 발광 유전자</option>
+                                <option value="CUSTOM">사용자 지정 서열 직접 입력...</option>
+                            </select>
+                        </div>
+
+                        <!-- Viewport Controls -->
+                        <div class="flex items-center space-x-1 bg-darkBg px-1.5 py-1 rounded-lg border border-darkBorder">
+                            <button onclick="resetCamera()" title="시점 리셋" class="p-1 hover:bg-darkBorder rounded text-gray-400 hover:text-white transition">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <button onclick="toggleWireframe()" title="스켈레톤 모드 토글" class="p-1 hover:bg-darkBorder rounded text-gray-400 hover:text-cyan-400 transition">
+                                <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+                            </button>
+                            <label class="flex items-center space-x-1 px-1 cursor-pointer">
+                                <span class="text-[10px] text-gray-400">회전</span>
+                                <input type="checkbox" id="auto-spin" checked class="w-3.5 h-3.5 rounded bg-darkBg border-darkBorder text-cyan-500 focus:ring-0">
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 3D DNA Helix Canvas Container -->
+                <div class="flex-1 bg-darkBg rounded-xl border border-darkBorder relative flex items-center justify-center overflow-hidden min-h-[300px]">
+                    <canvas id="dna-canvas" class="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"></canvas>
+                    
+                    <!-- Hover HUD Layer -->
+                    <div id="dna-hud-overlay" class="absolute top-3 left-3 bg-darkPanel/90 backdrop-blur border border-darkBorder px-3 py-2 rounded-lg text-[11px] pointer-events-none hidden max-w-[160px] shadow-xl z-20">
+                        <p class="text-cyan-400 font-bold font-orbitron text-xs mb-1">염기쌍 데이터</p>
+                        <p class="text-gray-300">인덱스: <span id="hud-index" class="font-bold text-white">#0</span></p>
+                        <p class="text-gray-300">결합: <span id="hud-bases" class="font-code font-bold">A - T</span></p>
+                        <p class="text-gray-400 text-[9px] mt-1 border-t border-darkBorder pt-1" id="hud-codon">코돈: AUG (Met)</p>
+                    </div>
+
+                    <!-- DNA Base Guide Labels -->
+                    <div class="absolute top-3 right-3 flex flex-col space-y-1 bg-darkPanel/85 backdrop-blur border border-darkBorder px-3 py-2 rounded-lg text-[9px] pointer-events-none shadow-lg z-20">
+                        <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-adenine"></span><span>아데닌 (Adenine, A)</span></div>
+                        <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-thymine"></span><span>티민 (Thymine, T)</span></div>
+                        <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-guanine"></span><span>구아닌 (Guanine, G)</span></div>
+                        <div class="flex items-center space-x-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cytosine"></span><span>사이토신 (Cytosine, C)</span></div>
+                    </div>
+                    
+                    <div class="absolute bottom-3 left-3 bg-darkPanel/80 backdrop-blur border border-darkBorder px-3 py-1.5 rounded-lg text-[11px] text-gray-400 pointer-events-none">
+                        드래그하여 이중나선 수동 회전 | 마우스 오버시 상세 데이터 출력
+                    </div>
+                </div>
+
+                <!-- Central Dogma Live Decoder Panel -->
+                <div class="mt-3 bg-darkBg border border-darkBorder rounded-xl p-3 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-1.5">
+                            <i data-lucide="cpu" class="w-4 h-4 text-cyan-400"></i>
+                            <span class="text-xs font-bold text-gray-200">중앙 분자 생물학 전사/번역 디코더 (Central Dogma)</span>
+                        </div>
+                        <span class="text-[10px] text-gray-400 font-code" id="amino-count">단백질: 0 AA</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-code">
+                        <!-- mRNA output -->
+                        <div class="bg-darkPanel p-2 rounded-lg border border-darkBorder">
+                            <span class="text-[10px] text-purple-400 block mb-0.5 font-sans font-semibold">mRNA 전사 서열 (5' -> 3')</span>
+                            <p id="mrna-sequence" class="text-purple-200 break-all text-[11px] font-mono select-all">AUG...</p>
+                        </div>
+                        <!-- Amino Acid output -->
+                        <div class="bg-darkPanel p-2 rounded-lg border border-darkBorder">
+                            <span class="text-[10px] text-amber-400 block mb-0.5 font-sans font-semibold">합성 단백질 아미노산 서열</span>
+                            <p id="amino-sequence" class="text-amber-200 break-all text-[11px] font-mono select-all">Met-Gly...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sequence Ribbon Editor -->
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-1.5">
+                        <label class="text-xs text-gray-400 block font-semibold">염기서열 실시간 편집 터미널</label>
+                        <span class="text-xs text-cyan-400 font-code font-bold" id="sequence-length">총 길이: 22 bp</span>
+                    </div>
+                    
+                    <!-- Nucleotide Grid -->
+                    <div class="bg-darkBg border border-darkBorder p-3 rounded-xl overflow-x-auto whitespace-nowrap scrollbar-thin">
+                        <div class="flex space-x-1.5 py-1" id="sequence-editor-ribbon">
+                            <!-- JS Dynamically injects nucleotide pill buttons here -->
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-gray-500 mt-1 font-sans">※ 염기 사슬을 직접 선택하여 실시간으로 다른 종류의 뉴클레오티드로 변환할 수 있습니다.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: Phenotype Simulator & New Tools (3 Cols) -->
+        <section class="xl:col-span-3 flex flex-col space-y-6 h-full xl:overflow-y-auto pl-0 xl:pl-2">
+            
+            <!-- Phenotype Virtual Simulator -->
+            <div class="bg-darkPanel border border-darkBorder rounded-2xl p-5 shadow-lg flex flex-col relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-green-500/5 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="flex items-center space-x-2 mb-3">
+                    <div class="p-1.5 bg-green-500/10 text-green-400 rounded-lg">
+                        <i data-lucide="biohazard" class="w-5 h-5"></i>
+                    </div>
+                    <h2 class="text-md font-bold text-gray-200">가상 표현형 & 생존율 분석</h2>
+                </div>
+
+                <!-- Environmental Stress Testing Chamber -->
+                <div class="bg-darkBg border border-darkBorder rounded-xl p-3 mb-3 space-y-2 text-xs">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-bold text-gray-300 text-[11px]">배양 챔버 환경 컨트롤러</span>
+                        <span id="survival-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-400 border border-green-800">생존율: 98%</span>
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                            <span>온도 설정 (℃)</span>
+                            <span id="temp-val" class="text-cyan-400 font-bold">37 ℃</span>
+                        </div>
+                        <input type="range" id="slider-temp" min="0" max="100" value="37" oninput="updateEnvironment()" class="w-full h-1 bg-darkPanel rounded-lg appearance-none cursor-pointer accent-cyan-400">
+                    </div>
+
+                    <div>
+                        <div class="flex justify-between text-[10px] text-gray-400 mb-0.5">
+                            <span>자외선(UV) 방사 세기</span>
+                            <span id="uv-val" class="text-yellow-400 font-bold">약함 (1.0)</span>
+                        </div>
+                        <input type="range" id="slider-uv" min="1" max="10" value="1" oninput="updateEnvironment()" class="w-full h-1 bg-darkPanel rounded-lg appearance-none cursor-pointer accent-yellow-400">
+                    </div>
+                </div>
+
+                <!-- Microscopic Visualizer -->
+                <div class="bg-darkBg border border-darkBorder rounded-xl h-40 relative flex items-center justify-center overflow-hidden">
+                    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-green-950/10 via-darkBg to-darkBg pointer-events-none"></div>
+                    
+                    <!-- Petri Dish Outer Ring -->
+                    <div class="w-32 h-32 border border-gray-700/60 rounded-full flex items-center justify-center relative">
+                        <div class="w-28 h-28 border-2 border-dashed border-cyan-500/15 rounded-full absolute animate-spin" style="animation-duration: 20s"></div>
+                        
+                        <!-- Bacteria Instance (SVG) -->
+                        <div id="phenotype-cell" class="w-16 h-10 bg-green-500/30 border-2 border-green-400 rounded-full flex flex-col items-center justify-center transition-all duration-700 relative shadow-inner">
+                            <!-- Flagellum (Tails) -->
+                            <div class="absolute right-full top-1/2 -translate-y-1/2 flex flex-col space-y-1">
+                                <div class="w-5 h-0.5 bg-green-400/80 rounded-full origin-right rotate-12 animate-pulse"></div>
+                                <div class="w-7 h-0.5 bg-green-400/80 rounded-full origin-right -rotate-12 animate-pulse" style="animation-delay: 0.2s"></div>
+                            </div>
+                            <!-- Core / Glow / Nucleus representation -->
+                            <div class="w-3.5 h-3.5 rounded-full bg-green-300 animate-ping opacity-75 absolute"></div>
+                            <div class="w-3 h-3 rounded-full bg-white relative z-10"></div>
+                            <span id="phenotype-abbreviation" class="text-[8px] font-bold font-orbitron text-green-100 z-10 mt-0.5">WT</span>
+                        </div>
+                    </div>
+
+                    <div class="absolute bottom-2 right-2 bg-darkPanel/90 border border-darkBorder px-2 py-0.5 rounded text-[9px] text-gray-400">
+                        배양 챔버 상태 감시 중
+                    </div>
+                </div>
+
+                <!-- Organism State Readout -->
+                <div class="mt-3 space-y-2 text-xs">
+                    <div class="flex justify-between border-b border-darkBorder/60 py-1">
+                        <span class="text-gray-400">생태 변종 명칭:</span>
+                        <span id="state-name" class="font-bold text-green-400 truncate max-w-[120px] text-right">대장균 야생형 (WT)</span>
+                    </div>
+                    <div class="flex justify-between border-b border-darkBorder/60 py-1">
+                        <span class="text-gray-400">자가 발광 여부:</span>
+                        <span id="state-glow" class="text-red-400 font-semibold">비발성 (None)</span>
+                    </div>
+                    <div class="flex justify-between border-b border-darkBorder/60 py-1">
+                        <span class="text-gray-400">생체 세포 크기:</span>
+                        <span id="state-size" class="text-gray-300">표준 크기 (1.0µm)</span>
+                    </div>
+                    <div class="flex justify-between py-1">
+                        <span class="text-gray-400">열/기온 극복도:</span>
+                        <span id="state-resist" class="text-gray-300">중간 위험 (약함)</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lab Journal System -->
+            <div class="bg-darkPanel border border-darkBorder rounded-2xl p-5 shadow-lg flex-1 flex flex-col min-h-[250px]">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-2">
+                        <div class="p-1.5 bg-yellow-500/10 text-yellow-500 rounded-lg">
+                            <i data-lucide="book-open" class="w-5 h-5"></i>
+                        </div>
+                        <h2 class="text-md font-bold text-gray-200">연구 실험 일지</h2>
+                    </div>
+                    <button onclick="downloadFasta()" class="text-xs text-cyan-400 hover:underline flex items-center space-x-1">
+                        <i data-lucide="download" class="w-3 h-3"></i>
+                        <span>FASTA 파일</span>
+                    </button>
+                </div>
+
+                <!-- Event Log Flow -->
+                <div class="flex-1 bg-darkBg border border-darkBorder rounded-xl p-3 flex flex-col">
+                    <div class="flex-1 overflow-y-auto space-y-3 pr-1 text-xs" id="journal-timeline">
+                        <!-- JS Dynamically injects logs here -->
+                    </div>
+                </div>
+
+                <div class="mt-3 flex space-x-2">
+                    <button onclick="exportReport()" class="w-full bg-cyan-600 hover:bg-cyan-500 text-black font-bold text-xs py-2 rounded-lg transition-colors flex items-center justify-center space-x-1">
+                        <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+                        <span>종합 실험 보고서 생성</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- REPORT MODAL -->
+    <div id="report-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-darkPanel border border-darkBorder max-w-lg w-full rounded-2xl p-6 shadow-2xl relative">
+            <button onclick="closeReportModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            <div class="text-center mb-4">
+                <div class="inline-block p-3 bg-cyan-500/10 text-cyan-400 rounded-full mb-2">
+                    <i data-lucide="scroll" class="w-8 h-8"></i>
+                </div>
+                <h3 class="text-lg font-bold font-orbitron">GENECRAFT RESEARCH REPORT</h3>
+                <p class="text-xs text-gray-400">가상 유전체 시뮬레이션 합성 완료 보고서</p>
+            </div>
+
+            <div class="bg-darkBg border border-darkBorder rounded-xl p-4 space-y-3 text-xs font-code mb-4 overflow-y-auto max-h-[300px]">
+                <div class="border-b border-darkBorder/60 pb-2">
+                    <p class="text-[10px] text-gray-500">■ 실험 일자: <span id="report-date"></span></p>
+                    <p class="text-[10px] text-gray-500">■ 연구 장소: 가상 분자 바이오시밀러 연구소</p>
+                </div>
+                <div>
+                    <h4 class="text-cyan-400 font-semibold text-xs mb-1">1. 합성된 DNA 염기서열 정보 (FASTA)</h4>
+                    <p class="text-gray-300 break-all select-all p-2 bg-darkPanel rounded border border-darkBorder text-[11px] font-mono" id="report-fasta"></p>
+                </div>
+                <div>
+                    <h4 class="text-green-400 font-semibold text-xs mb-1">2. 최종 유도 생명체 표현형 검증</h4>
+                    <p class="text-gray-300" id="report-phenotype-desc"></p>
+                </div>
+                <div>
+                    <h4 class="text-yellow-500 font-semibold text-xs mb-1">3. 실험 가위 및 카세트 삽입 이력</h4>
+                    <ul class="list-disc list-inside space-y-1 text-gray-400 text-[11px]" id="report-logs">
+                        <!-- Logs here -->
+                    </ul>
+                </div>
+            </div>
+
+            <button onclick="copyToClipboardAndShare()" class="w-full bg-green-500 hover:bg-green-400 text-black font-bold py-2 rounded-xl text-xs transition-colors flex items-center justify-center space-x-1">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+                <span>보고서 텍스트 클립보드 복사</span>
+            </button>
+            <div id="copy-toast" class="text-center text-green-400 text-xs mt-2 opacity-0 transition-opacity">성공적으로 복사되었으며 과학 일지에 이력이 인코딩되었습니다!</div>
+        </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <!-- MAIN APP CONTROLLER SCRIPT -->
+    <script>
+        // --- DATA & STATE MANAGEMENT ---
+        let originalSequence = "ATGCGATCGACTAGCTAGCTAG"; // Initial Standard DNA seq
+        let sequence = originalSequence;
+        let crisprMatchIndex = -1;
+        let crisprSearchLength = 0;
+        let labHistory = [];
+        let isWireframe = false;
+
+        // Preset Starting Templates
+        const GENE_TEMPLATES = {
+            'DEFAULT': "ATGCGATCGACTAGCTAGCTAG",
+            'GFP_STRAIN': "ATGCGATCGACTATGGGCTTTGCTAG",
+            'THERMO': "ATGCGATCGACATGCCCGGGAGCTAG",
+            'PLASTIC': "ATGCGATCGCATGCCCGGGAAAGCTAG",
+            'SICKLE_CELL': "ATGGACCCACTGAGTGAGCTGCACTGT", 
+            'INSULIN': "ATGGCCCTGTGGATGCGCCTCCTGCCC",   
+            'TARDIGRADE': "ATGAAATTTGGGATGCCCGGGAAATTT",
+            'LUCIFERASE': "ATGGAAGACGCCAAAAACATAAAGAAAGGC"
+        };
+
+        // Codon Translation Map for Central Dogma
+        const CODON_MAP = {
+            'AUG': 'Met', 'UUU': 'Phe', 'UUC': 'Phe', 'UUA': 'Leu', 'UUG': 'Leu',
+            'UCU': 'Ser', 'UCC': 'Ser', 'UCA': 'Ser', 'UCG': 'Ser',
+            'UAU': 'Tyr', 'UAC': 'Tyr', 'UAA': 'STOP', 'UAG': 'STOP',
+            'UGU': 'Cys', 'UGC': 'Cys', 'UGA': 'STOP', 'UGG': 'Trp',
+            'CUU': 'Leu', 'CUC': 'Leu', 'CUA': 'Leu', 'CUG': 'Leu',
+            'CCU': 'Pro', 'CCC': 'Pro', 'CCA': 'Pro', 'CCG': 'Pro',
+            'CAU': 'His', 'CAC': 'His', 'CAA': 'Gln', 'CAG': 'Gln',
+            'CGU': 'Arg', 'CGC': 'Arg', 'CGA': 'Arg', 'CGG': 'Arg',
+            'AUU': 'Ile', 'AUC': 'Ile', 'AUA': 'Ile',
+            'ACU': 'Thr', 'ACC': 'Thr', 'ACA': 'Thr', 'ACG': 'Thr',
+            'AAU': 'Asn', 'AAC': 'Asn', 'AAA': 'Lys', 'AAG': 'Lys',
+            'AGU': 'Ser', 'AGC': 'Ser', 'AGA': 'Arg', 'AGG': 'Arg',
+            'GUU': 'Val', 'GUC': 'Val', 'GUA': 'Val', 'GUG': 'Val',
+            'GCU': 'Ala', 'GCC': 'Ala', 'GCA': 'Ala', 'GCG': 'Ala',
+            'GAU': 'Asp', 'GAC': 'Asp', 'GAA': 'Glu', 'GAG': 'Glu',
+            'GGU': 'Gly', 'GGC': 'Gly', 'GGA': 'Gly', 'GGG': 'Gly'
+        };
+
+        // Active Phenotype characteristics
+        let activeGlow = false;
+        let activeGlowColor = 'green';
+        let activeSize = 1.0; 
+        let activeResist = '보통';
+
+        // Custom Presets
+        const GENE_PATTERNS = {
+            'GFP': { seq: 'ATGGGCTTT', name: 'GFP 녹색 형광 유전자', effect: '발광 녹색', glow: true, glowColor: 'green' },
+            'GIANT': { seq: 'ATGGGGAAAAAA', name: '세포 거대화 유전자', effect: '크기 증가', size: 1.8 },
+            'BLUE': { seq: 'ATGTTTCCCGGG', name: '심해 청색 색소 유전자', effect: '청색 발광', glow: true, glowColor: 'cyan' },
+            'RESIST': { seq: 'ATGCCCGGG', name: '극한 기온 생존 단백질', effect: '내열성/내한성 극대화', resist: '매우 우수' },
+            'RFP': { seq: 'ATGAAAGGG', name: '산호 붉은 형광 유전자', effect: '적색 발광', glow: true, glowColor: 'red' },
+            'MELANIN': { seq: 'ATGAAATTTGGG', name: '자외선 방어 멜라닌 유전자', effect: '방사선/UV 저항', resist: '방사선 차단' },
+            'PETASE': { seq: 'ATGCCCGGGAAA', name: '플라스틱 분해 효소', effect: '초고속 대사', size: 1.2 },
+            'NEURO': { seq: 'ATGAAACCCGGG', name: '초광속 신경 전달 가속 유전자', effect: '신경 반응 증폭', resist: '반응 극대화' }
+        };
+
+        function addLog(action, details) {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(' ')[0];
+            const logItem = { time: timeStr, action, details };
+            labHistory.push(logItem);
+
+            const timeline = document.getElementById('journal-timeline');
+            if (timeline) {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'border-l-2 border-cyan-500/50 pl-2 py-0.5 space-y-0.5';
+                itemDiv.innerHTML = `
+                    <div class="flex justify-between items-center text-[10px]">
+                        <span class="font-bold text-cyan-400 font-orbitron">${action}</span>
+                        <span class="text-gray-500 font-code">${timeStr}</span>
+                    </div>
+                    <p class="text-[11px] text-gray-300 leading-tight">${details}</p>
+                `;
+                timeline.prepend(itemDiv);
+            }
+        }
+
+        function resetToDefault() {
+            document.getElementById('template-select').value = 'DEFAULT';
+            loadGeneTemplate('DEFAULT');
+            labHistory = [];
+            document.getElementById('journal-timeline').innerHTML = '';
+            addLog("실험 초기화", "모든 유전자 서열 및 작업 기록이 초기 설정값으로 리셋되었습니다.");
+            showMessage("실험 초기화 완료", "유전체 상태 및 실험 일지가 초기화되었습니다.", "info");
+        }
+
+        function downloadFasta() {
+            const fastaContent = `>GENECRAFT_Synthetic_Sequence|Len:${sequence.length}bp\n${sequence}\n`;
+            const blob = new Blob([fastaContent], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `GENECRAFT_DNA_${Date.now()}.fasta`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showMessage("FASTA 다운로드", "DNA 염기서열 FASTA 파일 저장이 완료되었습니다.", "success");
+        }
+
+        function exportReport() {
+            document.getElementById('report-date').innerText = new Date().toLocaleString('ko-KR');
+            document.getElementById('report-fasta').innerText = `>GENECRAFT_Seq_${Date.now()}\n${sequence}`;
+            document.getElementById('report-phenotype-desc').innerText = `명칭: ${document.getElementById('state-name').innerText} | 세포 크기: ${document.getElementById('state-size').innerText} | 환경 내성: ${document.getElementById('state-resist').innerText}`;
+            
+            const logsList = document.getElementById('report-logs');
+            logsList.innerHTML = '';
+            if (labHistory.length === 0) {
+                logsList.innerHTML = '<li>기록된 실험 조작 내역이 없습니다.</li>';
+            } else {
+                labHistory.slice(-5).forEach(log => {
+                    const li = document.createElement('li');
+                    li.innerText = `[${log.time}] ${log.action}: ${log.details}`;
+                    logsList.appendChild(li);
+                });
+            }
+
+            document.getElementById('report-modal').classList.remove('hidden');
+        }
+
+        function closeReportModal() {
+            document.getElementById('report-modal').classList.add('hidden');
+        }
+
+        function copyToClipboardAndShare() {
+            const textToCopy = `[GENECRAFT RESEARCH REPORT]\nFASTA:\n${sequence}\n\n표현형: ${document.getElementById('state-name').innerText}`;
+            
+            const textarea = document.createElement('textarea');
+            textarea.value = textToCopy;
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                const toast = document.getElementById('copy-toast');
+                toast.classList.remove('opacity-0');
+                setTimeout(() => toast.classList.add('opacity-0'), 2500);
+            } catch (err) {
+                console.error('Failed to copy', err);
+            }
+            document.body.removeChild(textarea);
+        }
+
+        // --- CANVAS RENDERER FOR DNA HELIX ---
+        const canvas = document.getElementById('dna-canvas');
+        const ctx = canvas.getContext('2d');
+        let angleX = 0.35;
+        let angleY = 0;
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let spinSpeed = 0.0035;
+
+        let mouseX = -1000;
+        let mouseY = -1000;
+        let hoveredIndex = -1;
+
+        function resetCamera() {
+            angleX = 0.35;
+            angleY = 0;
+            showMessage("뷰포트 리셋", "3D 나선 각도가 초기 정면 위치로 정렬되었습니다.", "info");
+        }
+
+        function toggleWireframe() {
+            isWireframe = !isWireframe;
+            showMessage("렌더링 모드 전환", isWireframe ? "와이어프레임 골격 모드로 변경되었습니다." : "솔리드 분자 구체 모드로 변경되었습니다.", "info");
+        }
+
+        // Resize Canvas dynamically
+        function resizeCanvas() {
+            const rect = canvas.parentNode.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Mouse Over Interaction
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+
+            if (isDragging) {
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                angleY += deltaX * 0.01;
+                angleX += deltaY * 0.01;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            previousMousePosition = { x: e.clientX, y: e.clientY };
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // Touch support for Canvas
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            if (!isDragging || e.touches.length !== 1) return;
+            const deltaX = e.touches[0].clientX - previousMousePosition.x;
+            const deltaY = e.touches[0].clientY - previousMousePosition.y;
+            angleY += deltaX * 0.01;
+            angleX += deltaY * 0.01;
+            previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        });
+        window.addEventListener('touchend', () => { isDragging = false; });
+        canvas.addEventListener('mouseleave', () => {
+            mouseX = -1000;
+            mouseY = -1000;
+            hoveredIndex = -1;
+            document.getElementById('dna-hud-overlay').classList.add('hidden');
+        });
+
+        // DNA color map
+        const baseColors = {
+            'A': '#00E676', // Adenine
+            'T': '#FF3D00', // Thymine
+            'G': '#00E5FF', // Guanine
+            'C': '#FFD600'  // Cytosine
+        };
+
+        // Render Loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const isAutoSpin = document.getElementById('auto-spin').checked;
+            if (isAutoSpin && !isDragging) {
+                angleY += spinSpeed;
+            }
+
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const count = sequence.length;
+            const spacing = Math.min(26, (canvas.height - 110) / count);
+            const amplitude = 70;
+
+            const nodes1 = [];
+            const nodes2 = [];
+
+            for (let i = 0; i < count; i++) {
+                const base = sequence[i] || 'A';
+                const compBase = getComplementary(base);
+                
+                const baseTheta = (i * 0.44) + angleY;
+                const majorMinorOffset = 0.22 * Math.sin(i * 0.35); 
+                const theta1 = baseTheta + majorMinorOffset;
+                const theta2 = baseTheta + Math.PI - 0.3 + majorMinorOffset;
+                
+                let x1 = Math.cos(theta1) * amplitude;
+                let z1 = Math.sin(theta1) * amplitude;
+                let y1 = (i - count/2) * spacing;
+
+                let x2 = Math.cos(theta2) * amplitude;
+                let z2 = Math.sin(theta2) * amplitude;
+                let y2 = y1;
+
+                const temp_y1 = y1 * Math.cos(angleX) - z1 * Math.sin(angleX);
+                const temp_z1 = y1 * Math.sin(angleX) + z1 * Math.cos(angleX);
+                
+                const temp_y2 = y2 * Math.cos(angleX) - z2 * Math.sin(angleX);
+                const temp_z2 = y2 * Math.sin(angleX) + z2 * Math.cos(angleX);
+
+                nodes1.push({
+                    x: centerX + x1,
+                    y: centerY + temp_y1,
+                    z: temp_z1,
+                    base: base,
+                    index: i
+                });
+                
+                nodes2.push({
+                    x: centerX + x2,
+                    y: centerY + temp_y2,
+                    z: temp_z2,
+                    base: compBase,
+                    index: i
+                });
+            }
+
+            const drawQueue = [];
+
+            for (let i = 0; i < count - 1; i++) {
+                drawQueue.push({
+                    type: 'backbone',
+                    z: (nodes1[i].z + nodes1[i+1].z) / 2,
+                    p1: nodes1[i],
+                    p2: nodes1[i+1],
+                    strand: 1
+                });
+                drawQueue.push({
+                    type: 'backbone',
+                    z: (nodes2[i].z + nodes2[i+1].z) / 2,
+                    p1: nodes2[i],
+                    p2: nodes2[i+1],
+                    strand: 2
+                });
+            }
+
+            for (let i = 0; i < count; i++) {
+                drawQueue.push({
+                    type: 'rung',
+                    z: (nodes1[i].z + nodes2[i].z) / 2,
+                    p1: nodes1[i],
+                    p2: nodes2[i],
+                    index: i
+                });
+            }
+
+            for (let i = 0; i < count; i++) {
+                drawQueue.push({
+                    type: 'sphere',
+                    z: nodes1[i].z,
+                    p: nodes1[i]
+                });
+                drawQueue.push({
+                    type: 'sphere',
+                    z: nodes2[i].z,
+                    p: nodes2[i]
+                });
+            }
+
+            drawQueue.sort((a, b) => a.z - b.z);
+
+            let minDistance = 18;
+            let currentHoverIdx = -1;
+            for (let i = 0; i < count; i++) {
+                const dist1 = Math.hypot(nodes1[i].x - mouseX, nodes1[i].y - mouseY);
+                const dist2 = Math.hypot(nodes2[i].x - mouseX, nodes2[i].y - mouseY);
+                if (dist1 < minDistance || dist2 < minDistance) {
+                    currentHoverIdx = i;
+                }
+            }
+
+            if (currentHoverIdx !== -1) {
+                hoveredIndex = currentHoverIdx;
+                const hud = document.getElementById('dna-hud-overlay');
+                hud.classList.remove('hidden');
+                document.getElementById('hud-index').innerText = `#${hoveredIndex + 1}`;
+                document.getElementById('hud-bases').innerText = `${sequence[hoveredIndex]} - ${getComplementary(sequence[hoveredIndex])}`;
+                
+                const codonStart = Math.floor(hoveredIndex / 3) * 3;
+                const codonSeq = (sequence.substring(codonStart, codonStart + 3) + "AAA").substring(0, 3).replace(/T/g, 'U');
+                const aa = CODON_MAP[codonSeq] || 'Unknown';
+                document.getElementById('hud-codon').innerText = `코돈: ${codonSeq} (${aa})`;
+            } else {
+                hoveredIndex = -1;
+            }
+
+            drawQueue.forEach(item => {
+                if (item.type === 'backbone') {
+                    drawBackboneSegment(item.p1, item.p2, item.strand);
+                } else if (item.type === 'rung') {
+                    drawRung(item.p1, item.p2, item.index);
+                } else if (item.type === 'sphere') {
+                    const isTarget = (crisprMatchIndex !== -1 && item.p.index >= crisprMatchIndex && item.p.index < crisprMatchIndex + crisprSearchLength);
+                    const isHovered = (hoveredIndex === item.p.index);
+                    drawNucleotideSphere(item.p.x, item.p.y, item.p.z, item.p.base, isTarget, isHovered);
+                }
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        function drawBackboneSegment(p1, p2, strand) {
+            const avgZ = (p1.z + p2.z) / 2;
+            const scale = (avgZ + 100) / 200;
+            const width = Math.max(2.5, 7 * (0.5 + scale * 0.5));
+
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(p2.x, p2.y);
+            
+            if (strand === 1) {
+                ctx.strokeStyle = `rgba(0, 229, 255, ${0.4 + scale * 0.55})`;
+            } else {
+                ctx.strokeStyle = `rgba(0, 230, 118, ${0.4 + scale * 0.55})`;
+            }
+
+            ctx.lineWidth = width;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            if (!isWireframe) {
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.strokeStyle = `rgba(255, 255, 255, ${0.6 + scale * 0.4})`;
+                ctx.lineWidth = width / 3.5;
+                ctx.stroke();
+
+                const pulseOffset = (Date.now() * 0.003) % 1;
+                const dotX = p1.x + (p2.x - p1.x) * pulseOffset;
+                const dotY = p1.y + (p2.y - p1.y) * pulseOffset;
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, width * 0.6, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+            }
+        }
+
+        function drawRung(p1, p2, i) {
+            const isTarget = (crisprMatchIndex !== -1 && i >= crisprMatchIndex && i < crisprMatchIndex + crisprSearchLength);
+            const isHovered = (hoveredIndex === i);
+            const avgZ = (p1.z + p2.z) / 2;
+            const scale = (avgZ + 100) / 200;
+            const width = Math.max(1.8, (isTarget || isHovered ? 5.5 : 3.8) * (0.6 + scale * 0.4));
+
+            const midX = (p1.x + p2.x) / 2;
+            const midY = (p1.y + p2.y) / 2;
+
+            ctx.beginPath();
+            ctx.moveTo(p1.x, p1.y);
+            ctx.lineTo(midX, midY);
+            ctx.lineWidth = width;
+            if (isTarget) {
+                ctx.strokeStyle = `rgba(255, 61, 0, ${0.8 + Math.sin(Date.now() * 0.007) * 0.2})`;
+            } else if (isHovered) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            } else {
+                ctx.strokeStyle = hexToRgbA(baseColors[p1.base], 0.6 + scale * 0.4);
+            }
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(midX, midY);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.lineWidth = width;
+            if (isTarget) {
+                ctx.strokeStyle = `rgba(255, 61, 0, ${0.8 + Math.sin(Date.now() * 0.007) * 0.2})`;
+            } else if (isHovered) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            } else {
+                ctx.strokeStyle = hexToRgbA(baseColors[p2.base], 0.6 + scale * 0.4);
+            }
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.arc(midX, midY, width * 1.3, 0, Math.PI * 2);
+            ctx.fillStyle = isTarget ? '#ffffff' : (isHovered ? '#00E5FF' : 'rgba(255, 255, 255, 0.85)');
+            ctx.fill();
+        }
+
+        function drawNucleotideSphere(x, y, z, base, isTarget, isHovered) {
+            const scale = (z + 100) / 200; 
+            const radius = Math.max(5, (isTarget ? 11 : (isHovered ? 10 : 8)) * (0.55 + scale * 0.55));
+            
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            
+            const color = baseColors[base] || '#ffffff';
+            ctx.fillStyle = color;
+            ctx.fill();
+
+            if (!isWireframe) {
+                const grad = ctx.createRadialGradient(x - radius/2.8, y - radius/2.8, radius/12, x, y, radius);
+                grad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+                grad.addColorStop(0.3, 'rgba(255, 255, 255, 0.05)');
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+                ctx.fillStyle = grad;
+                ctx.fill();
+            }
+
+            if (isTarget) {
+                ctx.shadowColor = '#FF3D00';
+                ctx.shadowBlur = 20;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            } else if (isHovered) {
+                ctx.shadowColor = '#00E5FF';
+                ctx.shadowBlur = 15;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+            } else {
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            if (radius > 8) {
+                ctx.fillStyle = '#0D1117';
+                ctx.font = 'bold 9px Orbitron';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(base, x, y);
+            }
+        }
+
+        function hexToRgbA(hex, alpha) {
+            let c;
+            if(/^#([A-Fa-f0-9]{3}){1,2}$/.test(hex)){
+                c= hex.substring(1).split('');
+                if(c.length== 3){
+                    c= [c[0], c[0], c[1], c[1], c[2], c[2]];
+                }
+                c= '0x' + c.join('');
+                return 'rgba('+[(c>>16)&255, (c>>8)&255, c&255].join(',')+','+alpha+')';
+            }
+            return hex;
+        }
+
+        function getComplementary(base) {
+            switch(base) {
+                case 'A': return 'T';
+                case 'T': return 'A';
+                case 'G': return 'C';
+                case 'C': return 'G';
+                default: return 'A';
+            }
+        }
+
+        // --- CENTRAL DOGMA ENGINE (TRANSCRIPTION & TRANSLATION) ---
+        function updateCentralDogma() {
+            const cleanSeq = sequence.replace(/[^ATGC]/g, '');
+            const mrna = cleanSeq.replace(/T/g, 'U');
+            document.getElementById('mrna-sequence').innerText = mrna || '---';
+
+            const aminos = [];
+            for (let i = 0; i < mrna.length - 2; i += 3) {
+                const codon = mrna.substring(i, i + 3);
+                const aa = CODON_MAP[codon] || '?';
+                aminos.push(aa);
+                if (aa === 'STOP') break;
+            }
+
+            document.getElementById('amino-sequence').innerText = aminos.length > 0 ? aminos.join(' - ') : '단백질 미생성';
+            document.getElementById('amino-count').innerText = `단백질: ${aminos.length} AA`;
+        }
+
+        // --- ENVIRONMENTAL STRESS TEST ENGINE ---
+        function updateEnvironment() {
+            const temp = parseInt(document.getElementById('slider-temp').value);
+            const uv = parseInt(document.getElementById('slider-uv').value);
+
+            document.getElementById('temp-val').innerText = `${temp} ℃`;
+            document.getElementById('uv-val').innerText = uv === 1 ? '약함 (1.0)' : (uv < 5 ? `중간 (${uv}.0)` : `강함 (${uv}.0)`);
+
+            let survival = 100;
+
+            if (temp > 45 || temp < 10) {
+                if (sequence.includes(GENE_PATTERNS.RESIST.seq)) {
+                    survival -= Math.abs(temp - 37) * 0.4;
+                } else {
+                    survival -= Math.abs(temp - 37) * 1.8;
+                }
+            }
+
+            if (uv > 2) {
+                if (sequence.includes(GENE_PATTERNS.MELANIN.seq) || sequence === GENE_TEMPLATES.TARDIGRADE) {
+                    survival -= (uv - 2) * 2;
+                } else {
+                    survival -= (uv - 2) * 9;
+                }
+            }
+
+            survival = Math.max(0, Math.min(100, Math.round(survival)));
+            
+            const badge = document.getElementById('survival-badge');
+            badge.innerText = `생존율: ${survival}%`;
+
+            if (survival > 75) {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-green-950 text-green-400 border border-green-800";
+            } else if (survival > 35) {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-yellow-950 text-yellow-400 border border-yellow-800";
+            } else {
+                badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-red-950 text-red-400 border border-red-800 animate-pulse";
+            }
+        }
+
+        // --- SYSTEM ENGINE METHODS ---
+        function showMessage(title, message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let accentColor = 'border-cyan-500 text-cyan-200 bg-cyan-950/20';
+            let icon = 'info';
+            if (type === 'success') {
+                accentColor = 'border-green-500 text-green-200 bg-green-950/20';
+                icon = 'check-circle';
+            } else if (type === 'error') {
+                accentColor = 'border-red-500 text-red-200 bg-red-950/20';
+                icon = 'alert-triangle';
+            } else if (type === 'warn') {
+                accentColor = 'border-yellow-500 text-yellow-200 bg-yellow-950/20';
+                icon = 'shield-alert';
+            }
+
+            toast.className = `flex items-start space-x-3 border p-4 rounded-xl backdrop-blur-lg shadow-2xl transition-all duration-300 transform translate-x-12 opacity-0 pointer-events-auto max-w-sm ${accentColor}`;
+            toast.innerHTML = `
+                <i data-lucide="${icon}" class="w-5 h-5 flex-shrink-0"></i>
+                <div>
+                    <h4 class="text-xs font-bold font-orbitron">${title}</h4>
+                    <p class="text-[11px] mt-0.5 opacity-90 leading-snug">${message}</p>
+                </div>
+            `;
+            
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.remove('translate-x-12', 'opacity-0');
+            }, 10);
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-x-4');
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        function appendCrisprChar(char) {
+            const input = document.getElementById('crispr-input');
+            input.value += char;
+            sanitizeCrisprInput(input);
+        }
+
+        function backspaceCrisprChar() {
+            const input = document.getElementById('crispr-input');
+            input.value = input.value.slice(0, -1);
+            sanitizeCrisprInput(input);
+        }
+
+        function sanitizeCrisprInput(input) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const originalVal = input.value;
+            const cleanVal = originalVal.toUpperCase().replace(/[^ATGC]/g, '');
+            if (originalVal !== cleanVal) {
+                input.value = cleanVal;
+                try {
+                    input.setSelectionRange(Math.min(start, cleanVal.length), Math.min(end, cleanVal.length));
+                } catch(e) {}
+            }
+        }
+
+        function updateRibbon() {
+            const ribbon = document.getElementById('sequence-editor-ribbon');
+            ribbon.innerHTML = '';
+            
+            document.getElementById('sequence-length').innerText = `총 길이: ${sequence.length} bp`;
+
+            for (let i = 0; i < sequence.length; i++) {
+                const base = sequence[i];
+                const isTarget = (crisprMatchIndex !== -1 && i >= crisprMatchIndex && i < crisprMatchIndex + crisprSearchLength);
+                
+                let btnClass = 'border-darkBorder bg-darkPanel text-gray-400 hover:border-gray-500';
+
+                if (isTarget) {
+                    btnClass = 'border-red-500 text-red-100 bg-red-950/50 crispr-target-active';
+                } else if (base === 'A') { btnClass = 'border-adenine/40 text-adenine hover:bg-adenine/10'; }
+                else if (base === 'T') { btnClass = 'border-thymine/40 text-thymine hover:bg-thymine/10'; }
+                else if (base === 'G') { btnClass = 'border-guanine/40 text-guanine hover:bg-guanine/10'; }
+                else if (base === 'C') { btnClass = 'border-cytosine/40 text-cytosine hover:bg-cytosine/10'; }
+
+                const pill = document.createElement('div');
+                pill.className = `inline-flex flex-col items-center justify-center border p-2 rounded-lg cursor-pointer transition-all duration-150 w-11 ${btnClass}`;
+                pill.onclick = () => mutateNucleotide(i);
+                
+                pill.innerHTML = `
+                    <span class="text-xs font-bold font-orbitron">${base}</span>
+                    <span class="text-[8px] opacity-40 font-code font-semibold mt-0.5">${getComplementary(base)}</span>
+                    <span class="text-[7px] opacity-30 mt-1">${i+1}</span>
+                `;
+                
+                ribbon.appendChild(pill);
+            }
+
+            updateCentralDogma();
+            updateEnvironment();
+        }
+
+        function mutateNucleotide(index) {
+            const bases = ['A', 'T', 'G', 'C'];
+            const current = sequence[index];
+            const nextBase = bases[(bases.indexOf(current) + 1) % 4];
+            
+            sequence = sequence.substring(0, index) + nextBase + sequence.substring(index + 1);
+            
+            addLog("염기 치환", `위치 ${index + 1}의 유전자 염기를 ${current} ➡️ ${nextBase}로 인위 돌연변이화하였습니다.`);
+            showMessage("염기 치환 성공", `위치 ${index + 1}이 수동 치환되었습니다.`, "success");
+            
+            crisprMatchIndex = -1;
+            disableCutButton();
+
+            updateRibbon();
+            evaluatePhenotype();
+        }
+
+        function searchCRISPR() {
+            const inputVal = document.getElementById('crispr-input').value.toUpperCase().trim();
+            const statusDiv = document.getElementById('crispr-status');
+            
+            if (!inputVal) {
+                showMessage("서열 오류", "표적 염기 서열을 입력해 주세요.", "error");
+                return;
+            }
+
+            const idx = sequence.indexOf(inputVal);
+            if (idx === -1) {
+                statusDiv.innerHTML = `<span class="text-red-400 font-semibold font-code">미매칭:</span> 서열 <span class="font-bold text-white">${inputVal}</span>이 검출되지 않았습니다.`;
+                crisprMatchIndex = -1;
+                disableCutButton();
+                showMessage("스캔 실패", "일치하는 표적 부위가 존재하지 않습니다.", "warn");
+            } else {
+                crisprMatchIndex = idx;
+                crisprSearchLength = inputVal.length;
+                
+                statusDiv.innerHTML = `<span class="text-green-400 font-semibold font-code">결합 완료:</span> 위치 <span class="text-white font-bold">${idx + 1}</span>에서 표적 서열 <span class="text-orange-400 font-bold">${inputVal}</span> 발견.`;
+                
+                const btnCut = document.getElementById('btn-cut');
+                btnCut.disabled = false;
+                btnCut.className = "w-full py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 cursor-pointer";
+                
+                showMessage("가이드 RNA 결합 성공", "Cas9 단백질 표적 탐색이 완료되어 절단 상태를 활성화합니다.", "success");
+            }
+            updateRibbon();
+        }
+
+        function disableCutButton() {
+            const btnCut = document.getElementById('btn-cut');
+            btnCut.disabled = true;
+            btnCut.className = "w-full py-2 bg-red-950/20 border border-red-900/40 text-red-700 rounded-lg text-xs font-semibold flex items-center justify-center space-x-1 transition-all duration-200 cursor-not-allowed";
+        }
+
+        function executeCRISPRCut() {
+            if (crisprMatchIndex === -1) return;
+
+            const targetSeq = sequence.substring(crisprMatchIndex, crisprMatchIndex + crisprSearchLength);
+            const newSeq = sequence.substring(0, crisprMatchIndex) + "---" + sequence.substring(crisprMatchIndex + crisprSearchLength);
+            sequence = newSeq;
+
+            addLog("CRISPR 절단", `표적 위치 ${crisprMatchIndex + 1}의 서열 [${targetSeq}]을 이중 가닥 절단(DSB) 처리.`);
+            showMessage("DNA 절단 완료", "Cas9 단백질이 해당 사슬을 절단하고 결손 링커(---)를 형성했습니다.", "success");
+
+            crisprMatchIndex = -1;
+            disableCutButton();
+            updateRibbon();
+            evaluatePhenotype();
+        }
+
+        function insertCassette(cassetteId) {
+            const cassette = GENE_PATTERNS[cassetteId];
+            if (!cassette) return;
+
+            const cutIndex = sequence.indexOf('---');
+
+            if (cutIndex !== -1) {
+                sequence = sequence.replace('---', cassette.seq);
+                addLog("카세트 주입", `절단 링커에 '${cassette.name}' 유전 서열을 재조합 융합.`);
+                showMessage("유전자 재조합 완료", `'${cassette.name}' 융합에 성공하였습니다.`, "success");
+            } else {
+                sequence = sequence + cassette.seq;
+                addLog("말단 서열 부착", `DNA 말단에 '${cassette.name}'을 교차 주입.`);
+                showMessage("말단 프라이머 결합", `말단 결합부에서 새로운 발현 유닛이 유도됩니다.`, "info");
+            }
+
+            updateRibbon();
+            evaluatePhenotype();
+        }
+
+        function evaluatePhenotype() {
+            activeGlow = false;
+            activeGlowColor = 'green';
+            activeSize = 1.0;
+            activeResist = '보통';
+            let activeName = "대장균 야생형 (WT)";
+            let abbreviation = "WT";
+
+            if (sequence.includes(GENE_PATTERNS.GFP.seq)) {
+                activeGlow = true;
+                activeGlowColor = 'green';
+                activeName = "초록 형광 대장균 변종";
+                abbreviation = "GFP";
+            }
+            if (sequence.includes(GENE_PATTERNS.BLUE.seq)) {
+                activeGlow = true;
+                activeGlowColor = 'cyan';
+                activeName = "심해 청색 광학형 대장균";
+                abbreviation = "BLUE";
+            }
+            if (sequence.includes(GENE_PATTERNS.RFP.seq)) {
+                activeGlow = true;
+                activeGlowColor = 'red';
+                activeName = "붉은 형광 발광 대장균";
+                abbreviation = "RFP";
+            }
+            if (sequence.includes(GENE_PATTERNS.GIANT.seq)) {
+                activeSize = 1.5;
+                activeName = (activeGlow ? "발광형 " : "") + "거대 세포 대장균";
+                abbreviation += "+GH";
+            }
+            if (sequence.includes(GENE_PATTERNS.RESIST.seq)) {
+                activeResist = "강함 (극한 저항)";
+                activeName = (activeSize > 1.0 ? "내성형 거대 " : "내성형 ") + (activeGlow ? "발광 " : "") + "대장균";
+                abbreviation += "+HR";
+            }
+            if (sequence.includes(GENE_PATTERNS.MELANIN.seq)) {
+                activeResist = "우수 (UV/방사선 차단)";
+                activeName = "방사선 차단형 대장균";
+                abbreviation += "+UV";
+            }
+            if (sequence.includes(GENE_PATTERNS.PETASE.seq)) {
+                activeName = "친환경 플라스틱 분해형 대장균";
+                abbreviation += "+PET";
+            }
+            if (sequence.includes(GENE_PATTERNS.NEURO.seq)) {
+                activeName = (activeGlow ? "발광형 " : "") + "신경 자극 고속 반응 대장균";
+                abbreviation += "+NEURO";
+            }
+
+            if (sequence === GENE_TEMPLATES.SICKLE_CELL) {
+                activeName = "인간 적혈구 (낫모양 변형 결함)";
+                abbreviation = "SCA";
+                activeResist = "산소 수송 기능 저하";
+            } else if (sequence.includes("GAG") && originalSequence === GENE_TEMPLATES.SICKLE_CELL) {
+                activeName = "치료 완료 적혈구 (정상 형질 교정)";
+                abbreviation = "HbA";
+                activeResist = "정상 산소 수송능 복구";
+            }
+
+            if (sequence === GENE_TEMPLATES.INSULIN) {
+                activeName = "인슐린 분비 재조합 균주";
+                abbreviation = "INS";
+            }
+
+            if (sequence === GENE_TEMPLATES.TARDIGRADE) {
+                activeName = "완물동물 극강 생존 능력 균주";
+                abbreviation = "DSUP";
+                activeResist = "치사 방사선/완벽 건조 생존";
+            }
+
+            if (sequence === GENE_TEMPLATES.LUCIFERASE) {
+                activeName = "반딧불이 유래 효소 발광 균주";
+                abbreviation = "LUC";
+                activeGlow = true;
+                activeGlowColor = 'green';
+            }
+
+            const gapCount = (sequence.match(/---/g) || []).length;
+            if (gapCount > 2) {
+                activeName = "세포 분절 손실 (사멸 위험)";
+                abbreviation = "MUT";
+                activeSize = 0.55;
+                activeResist = "취약 (낮음)";
+            }
+
+            const cellElement = document.getElementById('phenotype-cell');
+            const abbrevSpan = document.getElementById('phenotype-abbreviation');
+            
+            abbrevSpan.innerText = abbreviation;
+            document.getElementById('state-name').innerText = activeName;
+            document.getElementById('state-size').innerText = `크기 배율 (${activeSize.toFixed(1)}x)`;
+            document.getElementById('state-resist').innerText = activeResist;
+
+            cellElement.style.transform = `scale(${activeSize})`;
+
+            if (activeGlow) {
+                let glowText = '초록색 발광';
+                if (activeGlowColor === 'cyan') glowText = '청색 발광';
+                if (activeGlowColor === 'red') glowText = '붉은색 발광';
+
+                document.getElementById('state-glow').innerText = `${glowText} (Active)`;
+                
+                if (activeGlowColor === 'green') {
+                    document.getElementById('state-glow').className = "text-green-400 font-semibold";
+                    cellElement.className = "w-16 h-10 bg-green-500/50 border-2 border-green-300 rounded-full flex flex-col items-center justify-center transition-all duration-700 relative shadow-[0_0_15px_rgba(34,197,94,0.6)] z-10";
+                    abbrevSpan.className = "text-[8px] font-bold font-orbitron text-white z-10 mt-0.5";
+                } else if (activeGlowColor === 'cyan') {
+                    document.getElementById('state-glow').className = "text-cyan-400 font-semibold";
+                    cellElement.className = "w-16 h-10 bg-cyan-500/50 border-2 border-cyan-300 rounded-full flex flex-col items-center justify-center transition-all duration-700 relative shadow-[0_0_15px_rgba(6,182,212,0.6)] z-10";
+                    abbrevSpan.className = "text-[8px] font-bold font-orbitron text-white z-10 mt-0.5";
+                } else if (activeGlowColor === 'red') {
+                    document.getElementById('state-glow').className = "text-red-400 font-semibold";
+                    cellElement.className = "w-16 h-10 bg-red-500/50 border-2 border-red-300 rounded-full flex flex-col items-center justify-center transition-all duration-700 relative shadow-[0_0_15px_rgba(239,68,68,0.6)] z-10";
+                    abbrevSpan.className = "text-[8px] font-bold font-orbitron text-white z-10 mt-0.5";
+                }
+            } else {
+                document.getElementById('state-glow').innerText = "비발성 (None)";
+                document.getElementById('state-glow').className = "text-red-400 font-semibold";
+                cellElement.className = "w-16 h-10 bg-green-950/40 border-2 border-green-800/80 rounded-full flex flex-col items-center justify-center transition-all duration-700 relative shadow-inner z-10";
+                abbrevSpan.className = "text-[8px] font-bold font-orbitron text-green-400/80 z-10 mt-0.5";
+            }
+        }
+
+        function loadGeneTemplate(templateKey) {
+            if (templateKey === 'CUSTOM') {
+                const userSeq = prompt("시작 유전자 염기서열(A, T, G, C)을 직접 입력하세요:", sequence);
+                if (userSeq) {
+                    const cleanSeq = userSeq.toUpperCase().replace(/[^ATGC]/g, '');
+                    if (cleanSeq.length > 0) {
+                        originalSequence = cleanSeq;
+                        sequence = cleanSeq;
+                        addLog("유전자 교체", `사용자 정의 염기서열(${cleanSeq.length}bp)로 실험 기반을 설정했습니다.`);
+                        showMessage("유전자 로드 완료", `사용자 지정 유전자 서열이 성공적으로 설정되었습니다.`, "success");
+                    } else {
+                        showMessage("입력 오류", "유효한 DNA 염기서열(A,T,G,C)을 찾지 못했습니다.", "error");
+                        document.getElementById('template-select').value = 'DEFAULT';
+                        return;
+                    }
+                } else {
+                    document.getElementById('template-select').value = 'DEFAULT';
+                    return;
+                }
+            } else if (GENE_TEMPLATES[templateKey]) {
+                originalSequence = GENE_TEMPLATES[templateKey];
+                sequence = originalSequence;
+                const templateNames = {
+                    'DEFAULT': "기본 야생형 (WT)",
+                    'GFP_STRAIN': "발광 해파리 GFP 균주",
+                    'THERMO': "극지 내열성 극대화 균주",
+                    'PLASTIC': "PET 분해 특화 균주",
+                    'SICKLE_CELL': "인간 낫모양 적혈구 유전자",
+                    'INSULIN': "인간 인슐린 생합성 유전자",
+                    'TARDIGRADE': "완물동물(곰벌레) 방사선 내성 유전자",
+                    'LUCIFERASE': "반딧불이 루시페라아제 생체 발광 유전자"
+                };
+                addLog("연구 템플릿 로드", `'${templateNames[templateKey]}' 서열을 초기 연구 가닥으로 불러왔습니다.`);
+                showMessage("템플릿 동기화", `'${templateNames[templateKey]}' 유전체가 로드되었습니다.`, "success");
+            }
+
+            crisprMatchIndex = -1;
+            disableCutButton();
+            document.getElementById('crispr-input').value = '';
+            document.getElementById('crispr-status').innerText = '유전자 서열 가이드라인이 스캔 준비되었습니다.';
+
+            updateRibbon();
+            evaluatePhenotype();
+        }
+
+        // Initialize App on Window Load
+        window.onload = function() {
+            lucide.createIcons();
+            
+            const inputField = document.getElementById('crispr-input');
+            if (inputField) {
+                inputField.addEventListener('input', function() {
+                    sanitizeCrisprInput(this);
+                });
+            }
+
+            addLog("시스템 구동", "Central Dogma 디코더 및 가상 표현형 시뮬레이터 구동 완료.");
+            updateRibbon();
+            evaluatePhenotype();
+            animate();
+        }
+    </script>
+</body>
+</html>
